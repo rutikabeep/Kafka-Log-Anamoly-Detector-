@@ -36,7 +36,7 @@ services:
         until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
           sleep 2
         done
-        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw_logs --partitions 12 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw_logs --partitions 50 --replication-factor 1
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic aggregated_events --partitions 1 --replication-factor 1
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic anomalies --partitions 1 --replication-factor 1
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hdfs_logs --partitions 1 --replication-factor 1
