@@ -1,0 +1,118 @@
+name: kafka-log-anomaly-detector
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  topic-init:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
+          sleep 2
+        done
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw_logs --partitions 12 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic aggregated_events --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic anomalies --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hdfs_logs --partitions 1 --replication-factor 1
+
+  aggregate-consumer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["python", "services/aggregate_consumer.py"]
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./models:/app/models
+      - ./preprocessed:/app/preprocessed
+
+  inference:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["python", "services/inference.py"]
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./models:/app/models
+      - ./preprocessed:/app/preprocessed
+
+  retrainer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["python", "services/retrainer.py"]
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./models:/app/models
+      - ./preprocessed:/app/preprocessed
+
+  raw-producer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["python", "services/raw_producer.py"]
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./models:/app/models
+      - ./preprocessed:/app/preprocessed
+      - ./HDFS_v1:/app/HDFS_v1
+
+  labelled-producer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["python", "services/labelled_producer.py"]
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./models:/app/models
+      - ./preprocessed:/app/preprocessed
