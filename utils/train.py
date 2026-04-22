@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from utils.settings import MODEL_DIR, RF_LATEST_MODEL_PATH
 
 
-def train_model(df_batch, version, n_estimators=100):
+def train_model(df_batch, version, n_estimators=200):
     """
     Train RandomForest on a batch of data and log to MLflow.
     Returns trained model, classification report, and saves feature columns for inference.
